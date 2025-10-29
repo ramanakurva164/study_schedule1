@@ -129,7 +129,9 @@ if st.session_state["plan"]:
     st.write("### 🗓️ Add to Google Calendar")
 
     # ------------------- GOOGLE CALENDAR INTEGRATION -------------------
+    # --- GOOGLE CALENDAR AUTH (Streamlit 2025 update) ---
     redirect_uri = "https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app/"
+    
     client_id = st.secrets["GOOGLE_CLIENT_ID"]
     client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
     
@@ -147,49 +149,52 @@ if st.session_state["plan"]:
         redirect_uri=redirect_uri,
     )
     
-    params = st.experimental_get_query_params()
+    # --- FIXED: use st.query_params (dict-like, not function)
+    params = st.query_params
     
-    # ✅ Preserve plan in URL before redirecting to Google
+    # ✅ Step 1: If not authenticated yet → show link
     if "google_creds" not in st.session_state and "code" not in params:
         if st.session_state.get("plan"):
             encoded_plan = json.dumps(st.session_state["plan"])
-            st.experimental_set_query_params(plan=encoded_plan)
+            st.query_params.update({"plan": encoded_plan})
     
         auth_url, _ = flow.authorization_url(
             prompt="consent", access_type="offline", include_granted_scopes="true"
         )
         st.markdown(f"[🔗 Click here to connect Google Calendar]({auth_url})")
     
-    # ✅ Handle redirect after Google sign-in
+    # ✅ Step 2: Handle redirect (after login)
     elif "code" in params:
         try:
-            code = params["code"][0]
+            code = params["code"]
             flow.fetch_token(code=code)
             creds = flow.credentials
             st.session_state["google_creds"] = json.loads(creds.to_json())
             st.session_state["google_auth_done"] = True
             st.success("✅ Google Calendar connected successfully!")
     
-            # restore plan from query params
+            # Restore plan from query param
             if "plan" in params:
                 try:
-                    st.session_state["plan"] = json.loads(params["plan"][0])
+                    st.session_state["plan"] = json.loads(params["plan"])
                 except:
                     pass
     
-            # clean URL
-            st.experimental_set_query_params()
+            # Clean URL
+            st.query_params.clear()
             st.rerun()
     
         except Exception as e:
             st.error(f"OAuth Error: {e}")
     
-    # ✅ Once authorized, show "Add to Calendar"
+    # ✅ Step 3: Already authorized → show Add to Calendar button
     elif st.session_state.get("google_auth_done"):
-        if st.button("Add Plan to Google Calendar"):
+        if st.button("🗓️ Add Plan to Google Calendar"):
             with st.spinner("Adding events to your calendar..."):
                 try:
-                    links = add_to_calendar(st.session_state["plan"], st.session_state["google_creds"])
+                    links = add_to_calendar(
+                        st.session_state["plan"], st.session_state["google_creds"]
+                    )
                     st.success(f"✅ Added {len(links)} events to your Google Calendar!")
                     for l in links:
                         st.markdown(f"- [View Event]({l})")
