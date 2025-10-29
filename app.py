@@ -14,7 +14,7 @@ import requests
 
 # Load .env
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 # ------------------- Helper Functions -------------------
 
@@ -126,8 +126,8 @@ if "plan" in st.session_state:
     st.write("#### 🗓️ Add to Google Calendar")
 
     if "google_creds" not in st.session_state:
-        client_id = os.getenv("GOOGLE_CLIENT_ID")
-        client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+        client_id = st.secrets("GOOGLE_CLIENT_ID")
+        client_secret = st.secrets("GOOGLE_CLIENT_SECRET")
 
         # Google OAuth flow
         flow = Flow.from_client_config(
