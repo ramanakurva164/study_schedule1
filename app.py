@@ -1,32 +1,23 @@
 import streamlit as st
-import os
-import tempfile
-import json
-import PyPDF2
-import docx
+import os, tempfile, json, re, datetime as dt
+import PyPDF2, docx
 import google.generativeai as genai
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
-import datetime as dt
-import re
 
 # ------------------- SESSION INITIALIZATION -------------------
-if "plan" not in st.session_state:
-    st.session_state["plan"] = None
-if "google_creds" not in st.session_state:
-    st.session_state["google_creds"] = None
-if "google_auth_done" not in st.session_state:
-    st.session_state["google_auth_done"] = False
+for key in ["plan", "google_creds", "google_auth_done"]:
+    if key not in st.session_state:
+        st.session_state[key] = None if key != "google_auth_done" else False
 
 # ------------------- CONFIG -------------------
 st.set_page_config(page_title="AI Study Planner", layout="wide")
 st.title("📘 AI Study Planner with Google Calendar Integration")
 
-# Load Gemini API Key
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# ------------------- HELPER FUNCTIONS -------------------
+# ------------------- HELPERS -------------------
 def extract_text(file):
     suffix = file.name.split(".")[-1].lower()
     with tempfile.NamedTemporaryFile(delete=False, suffix=f".{suffix}") as tmp:
@@ -63,20 +54,14 @@ def get_study_plan(text, days=7):
     Study material:
     {text[:8000]}
     """
-
     model = genai.GenerativeModel("gemini-2.0-flash")
     response = model.generate_content(prompt)
     plan_text = response.text.strip()
-
-    # Extract JSON safely
     try:
         return json.loads(plan_text)
     except Exception:
         m = re.search(r"\{.*\}", plan_text, re.DOTALL)
-        if not m:
-            st.error("❌ Couldn't parse study plan from AI response.")
-            return None
-        return json.loads(m.group(0))
+        return json.loads(m.group(0)) if m else None
 
 
 def add_to_calendar(plan, creds_dict):
@@ -121,20 +106,17 @@ if st.session_state["plan"]:
         with st.expander(t["name"]):
             st.markdown(f"**Summary:** {t['summary']}")
             st.markdown(f"**Estimated Hours:** {t['estimated_hours']}")
-            st.markdown("**Resources:**")
             for r in t["resources"]:
                 st.markdown(f"- 🔗 [{r}]({r})")
 
     st.divider()
     st.write("### 🗓️ Add to Google Calendar")
 
-    # ------------------- GOOGLE CALENDAR INTEGRATION -------------------
-    # --- GOOGLE CALENDAR AUTH (Streamlit 2025 update) ---
+    # ------------------- GOOGLE OAUTH -------------------
     redirect_uri = "https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app/"
-    
     client_id = st.secrets["GOOGLE_CLIENT_ID"]
     client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
-    
+
     flow = Flow.from_client_config(
         {
             "installed": {
@@ -148,22 +130,13 @@ if st.session_state["plan"]:
         scopes=["https://www.googleapis.com/auth/calendar.events"],
         redirect_uri=redirect_uri,
     )
-    
-    # --- FIXED: use st.query_params (dict-like, not function)
+
     params = st.query_params
-    
-    # ✅ Step 1: If not authenticated yet → show link
+
     if "google_creds" not in st.session_state and "code" not in params:
-        if st.session_state.get("plan"):
-            encoded_plan = json.dumps(st.session_state["plan"])
-            st.query_params.update({"plan": encoded_plan})
-    
-        auth_url, _ = flow.authorization_url(
-            prompt="consent", access_type="offline", include_granted_scopes="true"
-        )
+        auth_url, _ = flow.authorization_url(prompt="consent", access_type="offline", include_granted_scopes="true")
         st.markdown(f"[🔗 Click here to connect Google Calendar]({auth_url})")
-    
-    # ✅ Step 2: Handle redirect (after login)
+
     elif "code" in params:
         try:
             code = params["code"]
@@ -172,29 +145,25 @@ if st.session_state["plan"]:
             st.session_state["google_creds"] = json.loads(creds.to_json())
             st.session_state["google_auth_done"] = True
             st.success("✅ Google Calendar connected successfully!")
-    
-            # Restore plan from query param
+
+            # restore plan if passed in query
             if "plan" in params:
                 try:
                     st.session_state["plan"] = json.loads(params["plan"])
                 except:
                     pass
-    
-            # Clean URL
+
             st.query_params.clear()
             st.rerun()
-    
+
         except Exception as e:
             st.error(f"OAuth Error: {e}")
-    
-    # ✅ Step 3: Already authorized → show Add to Calendar button
+
     elif st.session_state.get("google_auth_done"):
         if st.button("🗓️ Add Plan to Google Calendar"):
             with st.spinner("Adding events to your calendar..."):
                 try:
-                    links = add_to_calendar(
-                        st.session_state["plan"], st.session_state["google_creds"]
-                    )
+                    links = add_to_calendar(plan, st.session_state["google_creds"])
                     st.success(f"✅ Added {len(links)} events to your Google Calendar!")
                     for l in links:
                         st.markdown(f"- [View Event]({l})")
