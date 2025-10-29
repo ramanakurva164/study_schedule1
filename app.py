@@ -129,48 +129,44 @@ if "plan" in st.session_state:
     # ------------------- GOOGLE CALENDAR -------------------
     redirect_uri = "https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app/"
 
+    # ---- Google Calendar OAuth ----
     if "google_creds" not in st.session_state:
         client_id = st.secrets["GOOGLE_CLIENT_ID"]
         client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
-
+    
+        redirect_uri = "https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app/"
+    
         flow = Flow.from_client_config(
             {
-                "web": {  # ✅ Important: Use web, not installed
+                "installed": {
                     "client_id": client_id,
-                    "project_id": "study-schedule-app",
+                    "client_secret": client_secret,
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
-                    "client_secret": client_secret,
                     "redirect_uris": [redirect_uri],
-                    "javascript_origins": [redirect_uri],
                 }
             },
             scopes=["https://www.googleapis.com/auth/calendar.events"],
+            redirect_uri=redirect_uri,
         )
-        flow.redirect_uri = redirect_uri
-
-        auth_url, _ = flow.authorization_url(prompt="consent", access_type="offline", include_granted_scopes="true")
-        st.markdown(f"[🔗 Connect your Google Calendar]({auth_url})")
-
-        # Handle redirect with `code`
-        code = st.query_params.get("code")
-        if code:
+    
+        auth_url, _ = flow.authorization_url(prompt="consent", access_type="offline")
+    
+        # Display Google Login Button
+        st.markdown(f"[🔗 Click here to connect Google Calendar]({auth_url})")
+    
+        # ✅ FIX: Use st.query_params correctly
+        query_params = st.experimental_get_query_params()
+        if "code" in query_params:
+            code = query_params["code"][0]
             try:
                 flow.fetch_token(code=code)
                 creds = flow.credentials
                 st.session_state["google_creds"] = json.loads(creds.to_json())
                 st.success("✅ Google Calendar connected successfully!")
+                # Clean URL after authentication
+                st.experimental_set_query_params()
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ OAuth Error: {e}")
-
-    else:
-        if st.button("➕ Add Plan to Google Calendar"):
-            with st.spinner("Adding events to your calendar..."):
-                try:
-                    links = add_to_calendar(plan, st.session_state["google_creds"])
-                    st.success(f"✅ Added {len(links)} events to your Google Calendar!")
-                    for l in links:
-                        st.markdown(f"- [View Event]({l})")
-                except Exception as e:
-                    st.error(f"❌ Calendar error: {e}")
+                st.error(f"OAuth Error: {e}")
+    
