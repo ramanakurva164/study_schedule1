@@ -129,7 +129,7 @@ if st.session_state["plan"]:
     st.write("### 🗓️ Add to Google Calendar")
 
     # ------------------- GOOGLE CALENDAR INTEGRATION -------------------
-    redirect_uri = "https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app"
+    redirect_uri = "https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app/"
 
     if not st.session_state["google_creds"]:
         client_id = st.secrets["GOOGLE_CLIENT_ID"]
