@@ -121,7 +121,7 @@ if "plan" in st.session_state:
         client_id = st.secrets["GOOGLE_CLIENT_ID"]
         client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
 
-        redirect_uri = "https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app/"
+        redirect_uri = "https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app"
 
         flow = Flow.from_client_config(
             {
