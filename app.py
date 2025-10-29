@@ -11,13 +11,14 @@ from google.oauth2.credentials import Credentials
 import datetime as dt
 import re
 
-
+# ------------------- SESSION INITIALIZATION -------------------
 if "plan" not in st.session_state:
     st.session_state["plan"] = None
 if "google_creds" not in st.session_state:
     st.session_state["google_creds"] = None
 if "google_auth_done" not in st.session_state:
     st.session_state["google_auth_done"] = False
+
 # ------------------- CONFIG -------------------
 st.set_page_config(page_title="AI Study Planner", layout="wide")
 st.title("📘 AI Study Planner with Google Calendar Integration")
@@ -25,8 +26,7 @@ st.title("📘 AI Study Planner with Google Calendar Integration")
 # Load Gemini API Key
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# ------------------- Helper Functions -------------------
-
+# ------------------- HELPER FUNCTIONS -------------------
 def extract_text(file):
     suffix = file.name.split(".")[-1].lower()
     with tempfile.NamedTemporaryFile(delete=False, suffix=f".{suffix}") as tmp:
@@ -100,11 +100,7 @@ def add_to_calendar(plan, creds_dict):
     return created
 
 # ------------------- MAIN APP -------------------
-
-uploaded_file = st.file_uploader(
-    "📂 Upload your study material (PDF, DOCX, or TXT)",
-    type=["pdf", "docx", "txt"]
-)
+uploaded_file = st.file_uploader("📂 Upload your study material (PDF, DOCX, or TXT)", type=["pdf", "docx", "txt"])
 days = st.slider("📅 How many days do you want the study plan for?", 3, 30, 7)
 
 if uploaded_file and st.button("✨ Generate Study Plan"):
@@ -116,8 +112,7 @@ if uploaded_file and st.button("✨ Generate Study Plan"):
             st.success("✅ Study plan generated successfully!")
 
 # ------------------- DISPLAY PLAN -------------------
-
-if "plan" in st.session_state:
+if st.session_state["plan"]:
     plan = st.session_state["plan"]
     st.subheader(plan.get("title", "Your Study Plan"))
 
@@ -133,60 +128,52 @@ if "plan" in st.session_state:
     st.divider()
     st.write("### 🗓️ Add to Google Calendar")
 
-    # ------------------- GOOGLE CALENDAR -------------------
-    redirect_uri = "https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app/"
-
-    # ---- Google Calendar OAuth ----
-    # ---- Google Calendar OAuth (Fixed for Streamlit Cloud) ----
-if "google_creds" not in st.session_state:
-    client_id = st.secrets["GOOGLE_CLIENT_ID"]
-    client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
-
+    # ------------------- GOOGLE CALENDAR INTEGRATION -------------------
     redirect_uri = "https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app"
 
-    # Build OAuth flow
-    flow = Flow.from_client_config(
-        {
-            "installed": {
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": [redirect_uri],
-            }
-        },
-        scopes=["https://www.googleapis.com/auth/calendar.events"],
-        redirect_uri=redirect_uri,
-    )
+    if not st.session_state["google_creds"]:
+        client_id = st.secrets["GOOGLE_CLIENT_ID"]
+        client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
 
-    auth_url, _ = flow.authorization_url(
-        prompt="consent",
-        access_type="offline",
-        include_granted_scopes="true",
-    )
+        flow = Flow.from_client_config(
+            {
+                "installed": {
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [redirect_uri],
+                }
+            },
+            scopes=["https://www.googleapis.com/auth/calendar.events"],
+            redirect_uri=redirect_uri,
+        )
 
-    st.markdown(f"[🔗 Click here to connect Google Calendar]({auth_url})")
+        auth_url, _ = flow.authorization_url(
+            prompt="consent",
+            access_type="offline",
+            include_granted_scopes="true",
+        )
 
-    # --- FIX: Streamlit-safe parameter handling ---
-    params = st.experimental_get_query_params()
+        st.markdown(f"[🔗 Click here to connect Google Calendar]({auth_url})")
 
-    if "code" in params and "google_auth_done" not in st.session_state:
-        code = params["code"][0]
-        try:
-            flow.fetch_token(code=code)
-            creds = flow.credentials
-            st.session_state["google_creds"] = json.loads(creds.to_json())
-            st.session_state["google_auth_done"] = True
-            st.success("✅ Google Calendar connected successfully!")
+        params = st.experimental_get_query_params()
+        if "code" in params:
+            try:
+                code = params["code"][0]
+                flow.fetch_token(code=code)
+                creds = flow.credentials
+                st.session_state["google_creds"] = json.loads(creds.to_json())
+                st.session_state["google_auth_done"] = True
+                st.success("✅ Google Calendar connected successfully!")
 
-            # Clean URL (remove ?code=) and reload safely
-            st.experimental_set_query_params()
-            st.rerun()
+                # Clean URL and reload safely
+                st.experimental_set_query_params()
+                st.rerun()
 
-        except Exception as e:
-            st.error(f"OAuth Error: {e}")
+            except Exception as e:
+                st.error(f"OAuth Error: {e}")
     else:
-        # User already connected
         st.success("✅ Google Calendar connected successfully!")
         if st.button("Add Plan to Google Calendar"):
             with st.spinner("Adding events to your calendar..."):
