@@ -130,55 +130,66 @@ if st.session_state["plan"]:
 
     # ------------------- GOOGLE CALENDAR INTEGRATION -------------------
     redirect_uri = "https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app/"
-
-    if not st.session_state["google_creds"]:
-        client_id = st.secrets["GOOGLE_CLIENT_ID"]
-        client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
-
-        flow = Flow.from_client_config(
-            {
-                "installed": {
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": [redirect_uri],
-                }
-            },
-            scopes=["https://www.googleapis.com/auth/calendar.events"],
-            redirect_uri=redirect_uri,
-        )
-
+    client_id = st.secrets["GOOGLE_CLIENT_ID"]
+    client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
+    
+    flow = Flow.from_client_config(
+        {
+            "installed": {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [redirect_uri],
+            }
+        },
+        scopes=["https://www.googleapis.com/auth/calendar.events"],
+        redirect_uri=redirect_uri,
+    )
+    
+    params = st.experimental_get_query_params()
+    
+    # ✅ Preserve plan in URL before redirecting to Google
+    if "google_creds" not in st.session_state and "code" not in params:
+        if st.session_state.get("plan"):
+            encoded_plan = json.dumps(st.session_state["plan"])
+            st.experimental_set_query_params(plan=encoded_plan)
+    
         auth_url, _ = flow.authorization_url(
-            prompt="consent",
-            access_type="offline",
-            include_granted_scopes="true",
+            prompt="consent", access_type="offline", include_granted_scopes="true"
         )
-
         st.markdown(f"[🔗 Click here to connect Google Calendar]({auth_url})")
-
-        params = st.experimental_get_query_params()
-        if "code" in params:
-            try:
-                code = params["code"][0]
-                flow.fetch_token(code=code)
-                creds = flow.credentials
-                st.session_state["google_creds"] = json.loads(creds.to_json())
-                st.session_state["google_auth_done"] = True
-                st.success("✅ Google Calendar connected successfully!")
-
-                # Clean URL and reload safely
-                st.experimental_set_query_params()
-                st.rerun()
-
-            except Exception as e:
-                st.error(f"OAuth Error: {e}")
-    else:
-        st.success("✅ Google Calendar connected successfully!")
+    
+    # ✅ Handle redirect after Google sign-in
+    elif "code" in params:
+        try:
+            code = params["code"][0]
+            flow.fetch_token(code=code)
+            creds = flow.credentials
+            st.session_state["google_creds"] = json.loads(creds.to_json())
+            st.session_state["google_auth_done"] = True
+            st.success("✅ Google Calendar connected successfully!")
+    
+            # restore plan from query params
+            if "plan" in params:
+                try:
+                    st.session_state["plan"] = json.loads(params["plan"][0])
+                except:
+                    pass
+    
+            # clean URL
+            st.experimental_set_query_params()
+            st.rerun()
+    
+        except Exception as e:
+            st.error(f"OAuth Error: {e}")
+    
+    # ✅ Once authorized, show "Add to Calendar"
+    elif st.session_state.get("google_auth_done"):
         if st.button("Add Plan to Google Calendar"):
             with st.spinner("Adding events to your calendar..."):
                 try:
-                    links = add_to_calendar(plan, st.session_state["google_creds"])
+                    links = add_to_calendar(st.session_state["plan"], st.session_state["google_creds"])
                     st.success(f"✅ Added {len(links)} events to your Google Calendar!")
                     for l in links:
                         st.markdown(f"- [View Event]({l})")
