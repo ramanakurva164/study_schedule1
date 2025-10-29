@@ -4,15 +4,13 @@ import tempfile
 import json
 import PyPDF2
 import docx
-from dotenv import load_dotenv
 import google.generativeai as genai
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 import datetime as dt
-import requests
 
-# Load .env
+# Load Gemini API Key
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 # ------------------- Helper Functions -------------------
@@ -57,7 +55,6 @@ def get_study_plan(text, days=7):
     response = model.generate_content(prompt)
     plan_text = response.text.strip()
 
-    # Try to extract JSON
     try:
         plan_json = json.loads(plan_text)
     except Exception:
@@ -117,10 +114,6 @@ if "plan" in st.session_state:
                 else:
                     st.markdown(f"- 🔗 {r}")
 
-    st.write("### Schedule")
-    st.table(plan["schedule"])
-
-    # Google Calendar integration
     st.divider()
     st.write("#### 🗓️ Add to Google Calendar")
 
@@ -128,7 +121,8 @@ if "plan" in st.session_state:
         client_id = st.secrets["GOOGLE_CLIENT_ID"]
         client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
 
-        # Google OAuth flow
+        redirect_uri = "https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app"
+
         flow = Flow.from_client_config(
             {
                 "installed": {
@@ -136,27 +130,34 @@ if "plan" in st.session_state:
                     "client_secret": client_secret,
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": ["https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app"]
+                    "redirect_uris": [redirect_uri]
                 }
             },
             scopes=["https://www.googleapis.com/auth/calendar.events"],
-            redirect_uri="https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app"
+            redirect_uri=redirect_uri
         )
 
         auth_url, _ = flow.authorization_url(prompt="consent")
         st.markdown(f"[Click here to connect Google Calendar]({auth_url})")
 
-        query_params = st.experimental_get_query_params()
-        if "code" in query_params:
-            code = query_params["code"][0]
-            flow.fetch_token(code=code)
-            creds = flow.credentials
-            st.session_state["google_creds"] = json.loads(creds.to_json())
-            st.experimental_rerun()
+        # Get query params (new method)
+        code = st.query_params.get("code")
+        if code:
+            try:
+                flow.fetch_token(code=code)
+                creds = flow.credentials
+                st.session_state["google_creds"] = json.loads(creds.to_json())
+                st.success("✅ Google Calendar connected successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"OAuth Error: {e}")
     else:
         if st.button("Add Plan to Google Calendar"):
             with st.spinner("Adding events to your calendar..."):
-                links = add_to_calendar(plan, st.session_state["google_creds"])
-                st.success(f"✅ Added {len(links)} events to your Google Calendar!")
-                for l in links:
-                    st.markdown(f"- [View Event]({l})")
+                try:
+                    links = add_to_calendar(plan, st.session_state["google_creds"])
+                    st.success(f"✅ Added {len(links)} events to your Google Calendar!")
+                    for l in links:
+                        st.markdown(f"- [View Event]({l})")
+                except Exception as e:
+                    st.error(f"❌ Calendar error: {e}")
