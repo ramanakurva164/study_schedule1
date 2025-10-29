@@ -9,6 +9,11 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 import datetime as dt
+import re
+
+# ------------------- CONFIG -------------------
+st.set_page_config(page_title="AI Study Planner", layout="wide")
+st.title("📘 AI Study Planner with Google Calendar Integration")
 
 # Load Gemini API Key
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -29,6 +34,7 @@ def extract_text(file):
         return "\n".join([p.text for p in doc.paragraphs])
     else:
         return file.read().decode("utf-8", errors="ignore")
+
 
 def get_study_plan(text, days=7):
     prompt = f"""
@@ -55,92 +61,98 @@ def get_study_plan(text, days=7):
     response = model.generate_content(prompt)
     plan_text = response.text.strip()
 
+    # Extract JSON safely
     try:
-        plan_json = json.loads(plan_text)
+        return json.loads(plan_text)
     except Exception:
-        import re
         m = re.search(r"\{.*\}", plan_text, re.DOTALL)
         if not m:
-            st.error("Couldn't parse study plan from AI response.")
+            st.error("❌ Couldn't parse study plan from AI response.")
             return None
-        plan_json = json.loads(m.group(0))
-    return plan_json
+        return json.loads(m.group(0))
+
 
 def add_to_calendar(plan, creds_dict):
     creds = Credentials.from_authorized_user_info(creds_dict)
     service = build("calendar", "v3", credentials=creds)
+
     created = []
     for session in plan.get("schedule", []):
         start_dt = dt.datetime.fromisoformat(f"{session['date']}T09:00:00")
         end_dt = start_dt + dt.timedelta(minutes=session.get("duration_minutes", 60))
+
         event = {
             "summary": f"Study: {session['topic']}",
             "description": session.get("objective", ""),
             "start": {"dateTime": start_dt.isoformat(), "timeZone": "Asia/Kolkata"},
             "end": {"dateTime": end_dt.isoformat(), "timeZone": "Asia/Kolkata"},
         }
+
         e = service.events().insert(calendarId="primary", body=event).execute()
         created.append(e.get("htmlLink"))
     return created
 
-# ------------------- Streamlit UI -------------------
+# ------------------- MAIN APP -------------------
 
-st.set_page_config(page_title="AI Study Planner", layout="wide")
-st.title("📘 AI Study Planner with Google Calendar Integration")
+uploaded_file = st.file_uploader(
+    "📂 Upload your study material (PDF, DOCX, or TXT)",
+    type=["pdf", "docx", "txt"]
+)
+days = st.slider("📅 How many days do you want the study plan for?", 3, 30, 7)
 
-uploaded_file = st.file_uploader("Upload your study material (PDF, DOCX, or TXT)", type=["pdf", "docx", "txt"])
-days = st.slider("How many days do you want the study plan for?", 3, 30, 7)
-
-if uploaded_file and st.button("Generate Study Plan"):
-    with st.spinner("Analyzing your file and generating a plan..."):
+if uploaded_file and st.button("✨ Generate Study Plan"):
+    with st.spinner("Analyzing file and generating plan..."):
         text = extract_text(uploaded_file)
         plan = get_study_plan(text, days)
         if plan:
             st.session_state["plan"] = plan
             st.success("✅ Study plan generated successfully!")
 
+# ------------------- DISPLAY PLAN -------------------
+
 if "plan" in st.session_state:
     plan = st.session_state["plan"]
     st.subheader(plan.get("title", "Your Study Plan"))
-    st.write("### Topics")
+
+    st.write("### 📘 Topics")
     for t in plan.get("topics", []):
         with st.expander(t["name"]):
             st.markdown(f"**Summary:** {t['summary']}")
             st.markdown(f"**Estimated Hours:** {t['estimated_hours']}")
             st.markdown("**Resources:**")
             for r in t["resources"]:
-                if "geeksforgeeks" in r.lower():
-                    st.markdown(f"- 🔗 [GeeksforGeeks]({r})")
-                else:
-                    st.markdown(f"- 🔗 {r}")
+                st.markdown(f"- 🔗 [{r}]({r})")
 
     st.divider()
-    st.write("#### 🗓️ Add to Google Calendar")
+    st.write("### 🗓️ Add to Google Calendar")
+
+    # ------------------- GOOGLE CALENDAR -------------------
+    redirect_uri = "https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app/"
 
     if "google_creds" not in st.session_state:
         client_id = st.secrets["GOOGLE_CLIENT_ID"]
         client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
 
-        redirect_uri = "https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app"
-
         flow = Flow.from_client_config(
             {
-                "installed": {
+                "web": {  # ✅ Important: Use web, not installed
                     "client_id": client_id,
-                    "client_secret": client_secret,
+                    "project_id": "study-schedule-app",
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": [redirect_uri]
+                    "client_secret": client_secret,
+                    "redirect_uris": [redirect_uri],
+                    "javascript_origins": [redirect_uri],
                 }
             },
             scopes=["https://www.googleapis.com/auth/calendar.events"],
-            redirect_uri=redirect_uri
         )
+        flow.redirect_uri = redirect_uri
 
-        auth_url, _ = flow.authorization_url(prompt="consent")
-        st.markdown(f"[Click here to connect Google Calendar]({auth_url})")
+        auth_url, _ = flow.authorization_url(prompt="consent", access_type="offline", include_granted_scopes="true")
+        st.markdown(f"[🔗 Connect your Google Calendar]({auth_url})")
 
-        # Get query params (new method)
+        # Handle redirect with `code`
         code = st.query_params.get("code")
         if code:
             try:
@@ -150,9 +162,10 @@ if "plan" in st.session_state:
                 st.success("✅ Google Calendar connected successfully!")
                 st.rerun()
             except Exception as e:
-                st.error(f"OAuth Error: {e}")
+                st.error(f"❌ OAuth Error: {e}")
+
     else:
-        if st.button("Add Plan to Google Calendar"):
+        if st.button("➕ Add Plan to Google Calendar"):
             with st.spinner("Adding events to your calendar..."):
                 try:
                     links = add_to_calendar(plan, st.session_state["google_creds"])
