@@ -13,7 +13,6 @@ import datetime as dt
 import requests
 
 # Load .env
-load_dotenv()
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 # ------------------- Helper Functions -------------------
