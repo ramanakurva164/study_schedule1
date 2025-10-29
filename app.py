@@ -140,7 +140,7 @@ if "plan" in st.session_state:
                 }
             },
             scopes=["https://www.googleapis.com/auth/calendar.events"],
-            redirect_uri="http://localhost:8501"
+            redirect_uri="https://studyschedule1-zhc7eg7dgb49ygtbskorze.streamlit.app"
         )
 
         auth_url, _ = flow.authorization_url(prompt="consent")
