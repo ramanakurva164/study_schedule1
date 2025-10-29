@@ -1,0 +1,10 @@
+# Secrets & tokens
+credentials.json
+token.json
+temp_credentials.json
+.env
+.streamlit/secrets.toml
+
+# Python caches
+__pycache__/
+*.pyc
