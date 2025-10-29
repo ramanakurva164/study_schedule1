@@ -133,7 +133,7 @@ if st.session_state["plan"]:
 
     params = st.query_params
 
-    if "google_creds" not in st.session_state and "code" not in params:
+    if not st.session_state.get("google_creds") and "code" not in params:
         auth_url, _ = flow.authorization_url(prompt="consent", access_type="offline", include_granted_scopes="true")
         st.markdown(f"[🔗 Click here to connect Google Calendar]({auth_url})")
 
