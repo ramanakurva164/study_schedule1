@@ -11,6 +11,13 @@ from google.oauth2.credentials import Credentials
 import datetime as dt
 import re
 
+
+if "plan" not in st.session_state:
+    st.session_state["plan"] = None
+if "google_creds" not in st.session_state:
+    st.session_state["google_creds"] = None
+if "google_auth_done" not in st.session_state:
+    st.session_state["google_auth_done"] = False
 # ------------------- CONFIG -------------------
 st.set_page_config(page_title="AI Study Planner", layout="wide")
 st.title("📘 AI Study Planner with Google Calendar Integration")
