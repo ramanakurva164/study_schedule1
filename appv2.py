@@ -113,23 +113,35 @@ def add_to_calendar(plan, creds_dict, start_time=dt.time(9,0), timezone="Asia/Ko
     
     return created_ids
 
-def delete_all_events(event_ids, creds_dict):
-    """Delete all events created in current session"""
-    if not event_ids:
-        return 0
-    
+def add_to_calendar(plan, creds_dict, start_time=dt.time(9,0), timezone="Asia/Kolkata"):
     creds = Credentials.from_authorized_user_info(creds_dict)
     service = build("calendar", "v3", credentials=creds)
+
+    created_ids = []
+    for session in plan.get("schedule", []):
+        date_obj = dt.datetime.strptime(session['date'], '%Y-%m-%d').date()
+        start_dt = dt.datetime.combine(date_obj, start_time)
+        end_dt = start_dt + dt.timedelta(minutes=session.get("duration_minutes", 60))
+
+        # Prepare event description with objective + resource links
+        description = session.get("objective", "")
+        if "resources" in session:
+            description += "\n\n📚 **Resources:**\n"
+            for link in session["resources"]:
+                description += f"- {link}\n"
+
+        event = {
+            "summary": f"Study: {session['topic']}",
+            "description": description.strip(),
+            "start": {"dateTime": start_dt.isoformat(), "timeZone": timezone},
+            "end": {"dateTime": end_dt.isoformat(), "timeZone": timezone},
+        }
+
+        e = service.events().insert(calendarId="primary", body=event).execute()
+        created_ids.append(e.get("id"))
     
-    deleted_count = 0
-    for event_id in event_ids:
-        try:
-            service.events().delete(calendarId="primary", eventId=event_id).execute()
-            deleted_count += 1
-        except Exception as e:
-            st.error(f"Error deleting event: {e}")
-    
-    return deleted_count
+    return created_ids
+
 
 # ------------------- MAIN APP FLOW -------------------
 
