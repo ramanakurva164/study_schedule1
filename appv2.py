@@ -120,7 +120,7 @@ if st.session_state["step"] == "connect":
     st.write("To get started, please connect your Google Calendar account first.")
     
     # ------------------- GOOGLE OAUTH -------------------
-    redirect_uri = "https://studyschedule1-zhc7eg7dgb49ygtbskorze1.streamlit.app/"
+    redirect_uri = "https://studyschedule.streamlit.app/"
     client_id = st.secrets["GOOGLE_CLIENT_ID"]
     client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
 
