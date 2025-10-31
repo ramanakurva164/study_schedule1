@@ -49,17 +49,37 @@ def get_study_plan(text, days=7, start_date=None):
     date_list = [(start_date + dt.timedelta(days=i)).isoformat() for i in range(days)]
     
     prompt = f"""
-    Create a {days}-day study schedule starting from {start_date}.
-    Use these exact dates in order: {date_list}
+    You are an AI Study Planner. Your goal is to create a {days}-day structured study plan starting from {start_date}.
+    Use these exact dates: {date_list}
     
-    Return JSON with this structure:
+    The plan should be based on the following study material:
+    {text[:8000]}
+    
+    For each day, assign a relevant topic, estimated duration (in minutes), a clear objective, 
+    and 3–5 high-quality **resource links** from reliable sources like:
+    - GeeksforGeeks
+    - W3Schools
+    - TutorialsPoint
+    - Official documentation pages
+    - FreeCodeCamp
+    - Coursera (if relevant)
+
+    🔹 Format the output strictly as JSON:
     {{
       "schedule": [
-        {{"date": "{date_list[0]}", "topic": "...", "duration_minutes": 60, "objective": "..."}}
+        {{
+          "date": "{date_list[0]}",
+          "topic": "Introduction to Machine Learning",
+          "duration_minutes": 90,
+          "objective": "Understand supervised and unsupervised learning",
+          "resources": [
+              "https://www.geeksforgeeks.org/machine-learning/",
+              "https://scikit-learn.org/stable/",
+              "https://www.w3schools.com/python/python_ml_getting_started.asp"
+          ]
+        }}
       ]
     }}
-    
-    Study material: {text[:8000]}
     """
     model = genai.GenerativeModel("gemini-2.0-flash")
     response = model.generate_content(prompt)
@@ -69,7 +89,6 @@ def get_study_plan(text, days=7, start_date=None):
     except Exception:
         m = re.search(r"\{.*\}", plan_text, re.DOTALL)
         return json.loads(m.group(0)) if m else None
-
 
 def add_to_calendar(plan, creds_dict, start_time=dt.time(9,0), timezone="Asia/Kolkata"):
     creds = Credentials.from_authorized_user_info(creds_dict)
