@@ -270,7 +270,21 @@ elif st.session_state["step"] == "display" and st.session_state["plan"]:
 
     st.divider()
     st.write("### 🗓️ Daily Schedule")
+
     for i, session in enumerate(plan.get("schedule", []), 1):
-        st.markdown(f"**Day {i} ({session['date']}):** {session['topic']} ({session.get('duration_minutes', 60)} min)")
-        if session.get("objective"):
-            st.markdown(f"   *Objective: {session['objective']}*")
+        st.markdown(f"### 📅 Day {i}: {session['topic']}")
+        st.markdown(f"**Date:** {session['date']}")
+        st.markdown(f"**Duration:** {session.get('duration_minutes', 60)} minutes")
+        st.markdown(f"**Objective:** {session.get('objective', 'No objective provided')}")
+    
+        # Display resource links on webpage
+        resources = session.get("resources", [])
+        if resources:
+            st.markdown("**🔗 Resources:**")
+            for link in resources:
+                if link.startswith("http"):
+                    st.markdown(f"- [{link}]({link})")
+                else:
+                    st.markdown(f"- {link}")
+    
+        st.divider()
