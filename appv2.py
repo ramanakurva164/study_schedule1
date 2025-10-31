@@ -20,7 +20,7 @@ for key in ["plan", "google_creds", "google_auth_done", "created_event_ids", "st
 
 # ------------------- CONFIG -------------------
 st.set_page_config(page_title="AI Study Planner", layout="wide")
-st.title("📘 AI Study Planner with Google Calendar Integration")
+st.title("📘 AI Study Planner")
 
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
@@ -41,25 +41,25 @@ def extract_text(file):
         return file.read().decode("utf-8", errors="ignore")
 
 
-def get_study_plan(text, days=7):
+def get_study_plan(text, days=7, start_date=None):
+    if not start_date:
+        start_date = dt.date.today()
+    
+    # Generate date list
+    date_list = [(start_date + dt.timedelta(days=i)).isoformat() for i in range(days)]
+    
     prompt = f"""
-    You are an AI tutor. Analyze the following study material and create a JSON plan:
-    - Extract 5–7 key topics.
-    - Estimate study time (hours) per topic.
-    - Create a {days}-day study schedule with daily sessions.
-    - For each topic, suggest 2–3 resources (GeeksforGeeks, official docs, YouTube tutorials).
-    - Return JSON only, structured like this:
-      {{
-        "title": "...",
-        "topics": [
-          {{"name": "...", "summary": "...", "estimated_hours": 3, "resources": ["...","..."]}}
-        ],
-        "schedule": [
-          {{"date": "2025-11-01", "topic": "...", "duration_minutes": 60, "objective": "..."}}
-        ]
-      }}
-    Study material:
-    {text[:8000]}
+    Create a {days}-day study schedule starting from {start_date}.
+    Use these exact dates in order: {date_list}
+    
+    Return JSON with this structure:
+    {{
+      "schedule": [
+        {{"date": "{date_list[0]}", "topic": "...", "duration_minutes": 60, "objective": "..."}}
+      ]
+    }}
+    
+    Study material: {text[:8000]}
     """
     model = genai.GenerativeModel("gemini-2.0-flash")
     response = model.generate_content(prompt)
@@ -71,28 +71,28 @@ def get_study_plan(text, days=7):
         return json.loads(m.group(0)) if m else None
 
 
-def add_to_calendar(plan, creds_dict):
+def add_to_calendar(plan, creds_dict, start_time=dt.time(9,0), timezone="Asia/Kolkata"):
     creds = Credentials.from_authorized_user_info(creds_dict)
     service = build("calendar", "v3", credentials=creds)
 
     created_ids = []
-    created_links = []
     for session in plan.get("schedule", []):
-        start_dt = dt.datetime.fromisoformat(f"{session['date']}T09:00:00")
+        # Combine user's preferred date and time
+        date_obj = dt.datetime.strptime(session['date'], '%Y-%m-%d').date()
+        start_dt = dt.datetime.combine(date_obj, start_time)
         end_dt = start_dt + dt.timedelta(minutes=session.get("duration_minutes", 60))
 
         event = {
             "summary": f"Study: {session['topic']}",
             "description": session.get("objective", ""),
-            "start": {"dateTime": start_dt.isoformat(), "timeZone": "Asia/Kolkata"},
-            "end": {"dateTime": end_dt.isoformat(), "timeZone": "Asia/Kolkata"},
+            "start": {"dateTime": start_dt.isoformat(), "timeZone": timezone},
+            "end": {"dateTime": end_dt.isoformat(), "timeZone": timezone},
         }
 
         e = service.events().insert(calendarId="primary", body=event).execute()
         created_ids.append(e.get("id"))
-        created_links.append(e.get("htmlLink"))
     
-    return created_ids, created_links
+    return created_ids
 
 def delete_all_events(event_ids, creds_dict):
     """Delete all events created in current session"""
@@ -188,7 +188,7 @@ elif st.session_state["step"] == "upload":
                 # Automatically add to calendar
                 with st.spinner("Adding events to your Google Calendar..."):
                     try:
-                        event_ids, event_links = add_to_calendar(plan, st.session_state["google_creds"])
+                        event_ids = add_to_calendar(plan, st.session_state["google_creds"])
                         st.session_state["created_event_ids"] = event_ids
                         st.success(f"✅ Study plan generated and {len(event_ids)} events added to your calendar!")
                         st.rerun()
